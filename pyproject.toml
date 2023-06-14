@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.17.1", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sipmpdf"
+authors = [
+    {name = "Yi-Mu Chen", email = "yimuchen@umd.edu"},
+]
+description = "SiPM response functions as zfit PDFs"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+dependencies = [
+    "numpy",
+    "scipy",
+    "numba",
+    "mplhep",
+    "zfit==0.13.1",
+]
+dynamic = ["version"]
+
+### The following is for the construction of the package using hatchling
+[tool.hatch.version]
+source = "vcs"
+path = "src/sipmpdf/__init__.py"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/sipmpdf/version.py"
+
+[tool.setuptools_scm]
+write_to = "src/sipmpdf/_version.py"
