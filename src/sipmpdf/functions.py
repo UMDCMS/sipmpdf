@@ -223,9 +223,9 @@ def darkcurrent_response(x: np.float64,
   eps = gain * resolution
   lo = pedestal
   up = pedestal + gain
+  
   return kern.where((x > (lo + eps)) & (x < (up - eps)),
-                    ((1 / (x - lo)) + (1 / (up - x))) / (2 * kern.log(
-                      (up - lo - eps) / eps)), 0)
+                    ((1 / (x - lo)) + (1 / (up - x))) / (2 * kern.log((up - lo - eps) / eps)), 0)
 
 
 def ap_response_smeared(x: np.float64, smear: np.float64, n_ap: np.int64,
@@ -239,9 +239,29 @@ def darkcurrent_response_smeared(x: np.float64,
                                  pedestal: np.float64,
                                  gain: np.float64,
                                  resolution: np.float64 = 1e-4) -> np.float64:
-  kern = kernel_switch(x, smaer, pedestal, gain, resolution)
-  pass
+  kern = kernel_switch(x, smear, pedestal, gain, resolution)
 
+  """
+  notes for Grace:
+  inside summation: darkcurrent_response(n*delta,pedestal,gain,resolution)*normal(x-n*delta,0,smear)*delta """
+
+  n_max=256 #change later to 256, just for testing purposes
+  delta=(3*smear)/n_max #confirm this is the right measurement
+  input_count=len(x)
+
+  #extend arrays
+  def extend_arr(x):
+    return kern.repeat(x[kern.newaxis, ...], n_max, axis=0)
+  x=extend_arr(x)
+  smear=extend_arr(smear)
+  pedestal=extend_arr(pedestal)
+  gain=extend_arr(gain)
+  resolution=extend_arr(resolution)
+  
+  #do math
+  narray=kern.indices((n_max,input_count))[0] #indices go from 0 to n_max-1
+  result=darkcurrent_response(narray*delta,pedestal,gain,resolution)*delta*normal(x-narray*delta,0,smear)
+  return kern.sum(result, axis=0)
 
 def sipm_response(
   x: np.float64,
