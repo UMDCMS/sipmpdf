@@ -171,7 +171,12 @@ def binomial_prob(x: np.int64, total: np.int64, prob: np.float64) -> np.float64:
                   - kern.loggamma(total - x + 1))
 
 
-def ap_response(x: np.float64, n_ap: np.int64, beta: np.float64) -> np.float64:
+def ap_response(x: np.float64, 
+                n_ap: np.int64, 
+                beta: np.float64,
+                pedestal: np.float64, 
+                gain: np.float64,
+                total: np.int64) -> np.float64:
   """
   Afterpulse response given a fixed number of after pulses occurs. (with random
   noise effects)
@@ -184,15 +189,24 @@ def ap_response(x: np.float64, n_ap: np.int64, beta: np.float64) -> np.float64:
       number of afterpulses that occur
   beta : np.float64
       Afterpulse timescale factor.
-
+  pedestal : np.float64
+      The pedestal value
+  gain : np.float64
+      The gain of the SiPM
+  total : numpy.int64
+      Total number of observed events.
   Returns
   -------
   np.float64
       Probability density of the after pulse response
   """
-  kern = kernel_switch(x, n_np, beta)
-  pass
-
+  kern = kernel_switch(x, n_ap, beta,pedestal,gain,total)
+  pk=pedestal+total*gain
+  
+  numerator=kern.power(x-pk,n_ap)*kern.exp((pk-x)/beta)*kern.heaviside(x-pk,.5)
+  denominator=kern.math.factorial(n_ap-1)*kern.power(beta,n_ap)
+  
+  return numerator/denominator
 
 def darkcurrent_response(x: np.float64,
                          pedestal: np.float64,
@@ -228,10 +242,21 @@ def darkcurrent_response(x: np.float64,
                     ((1 / (x - lo)) + (1 / (up - x))) / (2 * kern.log((up - lo - eps) / eps)), 0)
 
 
+##This part needs work, uncelar if it works correctly
 def ap_response_smeared(x: np.float64, smear: np.float64, n_ap: np.int64,
-                        beta: np.float64) -> np.float64:
-  kern = kernel_switch(x, smear, n_np, beta)
-  pass
+                        beta: np.float64,pedestal: np.float64, 
+                        gain: np.float64,total: np.int64) -> np.float64:
+  kern = kernel_switch(x, smear, n_ap, beta, pedestal, gain, total)
+  
+  ##did this based on the paper which says this only matters when i<2
+  if n_ap>1:
+    return ap_response(x=x,n_ap=n_ap,beta=beta, pedestal=pedestal,gain=gain,total=total)
+  else:
+    pk=pedestal+total*gain
+    import math
+    from scipy import special
+    result=kern.exp((pk-x)/beta)*(1-special.erf((x-pk)/(smear*math.sqrt(2))))/(2*beta)##Not sure about if this will work with tensorflow
+    return result
 
 @expand_shape
 def darkcurrent_response_smeared(x: np.float64,
@@ -245,7 +270,7 @@ def darkcurrent_response_smeared(x: np.float64,
   notes for Grace:
   inside summation: darkcurrent_response(n*delta,pedestal,gain,resolution)*normal(x-n*delta,0,smear)*delta """
 
-  n_max=256 #change later to 256, just for testing purposes
+  n_max=1000 #change later to 256, just for testing purposes
   delta=(3*smear)/n_max #confirm this is the right measurement
 
   #extend arrays
@@ -259,7 +284,8 @@ def darkcurrent_response_smeared(x: np.float64,
   
   #do math
   narray=kern.local_index(x, axis=0) #indices go from 0 to n_max-1
-  result=darkcurrent_response(narray*delta,pedestal,gain,resolution)*delta*normal(x-narray*delta,0,smear)
+  narray-=int((n_max/2))
+  result=darkcurrent_response(x-narray*delta,pedestal,gain,resolution)*delta*normal(narray*delta,0,smear)
   return kern.sum(result, axis=0)
 
 def sipm_response(
