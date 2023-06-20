@@ -233,7 +233,7 @@ def ap_response_smeared(x: np.float64, smear: np.float64, n_ap: np.int64,
   kern = kernel_switch(x, smear, n_np, beta)
   pass
 
-
+@expand_shape
 def darkcurrent_response_smeared(x: np.float64,
                                  smear: np.float64,
                                  pedestal: np.float64,
@@ -247,7 +247,6 @@ def darkcurrent_response_smeared(x: np.float64,
 
   n_max=256 #change later to 256, just for testing purposes
   delta=(3*smear)/n_max #confirm this is the right measurement
-  input_count=len(x)
 
   #extend arrays
   def extend_arr(x):
@@ -259,7 +258,7 @@ def darkcurrent_response_smeared(x: np.float64,
   resolution=extend_arr(resolution)
   
   #do math
-  narray=kern.indices((n_max,input_count))[0] #indices go from 0 to n_max-1
+  narray=kern.local_index(x, axis=0) #indices go from 0 to n_max-1
   result=darkcurrent_response(narray*delta,pedestal,gain,resolution)*delta*normal(x-narray*delta,0,smear)
   return kern.sum(result, axis=0)
 
