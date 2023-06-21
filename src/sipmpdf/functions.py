@@ -173,10 +173,7 @@ def binomial_prob(x: np.int64, total: np.int64, prob: np.float64) -> np.float64:
 
 def ap_response(x: np.float64, 
                 n_ap: np.int64, 
-                beta: np.float64,
-                pedestal: np.float64, 
-                gain: np.float64,
-                total: np.int64) -> np.float64:
+                beta: np.float64) -> np.float64:
   """
   Afterpulse response given a fixed number of after pulses occurs. (with random
   noise effects)
@@ -189,29 +186,21 @@ def ap_response(x: np.float64,
       number of afterpulses that occur
   beta : np.float64
       Afterpulse timescale factor.
-  pedestal : np.float64
-      The pedestal value
-  gain : np.float64
-      The gain of the SiPM
-  total : numpy.int64
-      Total number of observed events.
   Returns
   -------
   np.float64
       Probability density of the after pulse response
   """
-  kern = kernel_switch(x, n_ap, beta,pedestal,gain,total)
-  pk=pedestal+total*gain
+  kern = kernel_switch(x, n_ap, beta)
   
-  numerator=kern.power(x-pk,n_ap)*kern.exp((pk-x)/beta)*kern.heaviside(x-pk,.5)
+  numerator=kern.power(x,n_ap-1)*kern.exp((-x)/beta)*kern.heaviside(x,1)
   denominator=kern.math.factorial(n_ap-1)*kern.power(beta,n_ap)
   
   return numerator/denominator
 
-def darkcurrent_response(x: np.float64,
-                         pedestal: np.float64,
-                         gain: np.float64,
-                         resolution: np.float64 = 1e-4) -> np.float64:
+def darkcurrent_response_original(x: np.float64,
+                                  gain: np.float64,
+                                  resolution: np.float64 = 1e-4) -> np.float64:
   """
   Dark current response without random noise, given a detector resolution factor
   (calculated relative to the gain of the system)
@@ -232,57 +221,84 @@ def darkcurrent_response(x: np.float64,
   np.float64
       Probability density of observing a dark current response of
   """
-  kern = kernel_switch(x, pedestal, gain, resolution)
+  kern = kernel_switch(x, gain, resolution)
 
   eps = gain * resolution
-  lo = pedestal
-  up = pedestal + gain
-  
-  return kern.where((x > (lo + eps)) & (x < (up - eps)),
-                    ((1 / (x - lo)) + (1 / (up - x))) / (2 * kern.log((up - lo - eps) / eps)), 0)
+
+  left = 1 / x
+  right = 1 / (gain - x)
+  norm = 2 * (kern.log(1 - resolution) - kern.log(resolution))
+  return kern.where(((x > eps) & (x < (gain - eps))),  #
+                    (left + right) / norm, 0)
+
+def darkcurrent_response(x: np.float64,
+                         gain: np.float64,
+                         resolution: np.float64 = 1e-4) -> np.float64:
+  """
+  Modified dark current response, as the unmodified dark current response has
+  excessively sharp features that can make other numerical tools unstable, the
+  modified version attempts smooth out the dark current response by substituting
+  out the sharp features at x~pedestal and x~(pedestal+gain) with a normal
+  response with a width of ~0.01 resolution (since we don't expect any detector
+  to have such low a noise, 0.01 feels like a reasonable cutoff)
+
+  Here we modify the function to preserve the overall normalization and the 0-th
+  order smoothness of the function (function is continuous, but derivative is
+  not):
+
+  - If x is in the "nominal region" of (x > pedestal + 0.01 * gain) and (x <
+    pedestal - 0.01 * gain), we will return the original response function.
 
 
-##This part needs work, uncelar if it works correctly
+  """
+  kern = kernel_switch(x, gain, resolution)
+  coarse_res = resolution * 50
+  coarse_res = kern.where(coarse_res > 0.01, 0.01, coarse_res)
+  eps = gain * resolution
+  coarse = gain * coarse_res
+
+  nominal = kern.where(((x > coarse) & (x < (gain - coarse))),  #
+                       darkcurrent_response_original(x, gain, resolution), 0.0)
+
+  outer = normal(x, 0, coarse) + normal(x, gain, coarse)
+  outer_norm = (kern.log(coarse_res) - kern.log(resolution)) / 2.0 / (
+    kern.log(1 - resolution) - kern.log(resolution))
+  return nominal + outer * outer_norm
+
 def ap_response_smeared(x: np.float64, smear: np.float64, n_ap: np.int64,
-                        beta: np.float64,pedestal: np.float64, 
-                        gain: np.float64,total: np.int64) -> np.float64:
-  kern = kernel_switch(x, smear, n_ap, beta, pedestal, gain, total)
-  
-  ##did this based on the paper which says this only matters when i<2
-  if n_ap>1:
-    return ap_response(x=x,n_ap=n_ap,beta=beta, pedestal=pedestal,gain=gain,total=total)
-  else:
-    pk=pedestal+total*gain
-    import math
-    from scipy import special
-    result=kern.exp((pk-x)/beta)*(1-special.erf((x-pk)/(smear*math.sqrt(2))))/(2*beta)##Not sure about if this will work with tensorflow
-    return result
+                        beta: np.float64) -> np.float64:
+  kern = kernel_switch(x, smear, n_ap, beta)
+
+  return kern.where(n_ap==1,
+                    kern.exp(-x/beta)*(1+kern.erf(x/(smear*kern.sqrt(2))))/(2*beta),
+                    ap_response(x=x,n_ap=n_ap,beta=beta))  
 
 @expand_shape
+##Note:this fails to work
 def darkcurrent_response_smeared(x: np.float64,
                                  smear: np.float64,
-                                 pedestal: np.float64,
                                  gain: np.float64,
                                  resolution: np.float64 = 1e-4) -> np.float64:
-  kern = kernel_switch(x, smear, pedestal, gain, resolution)
+  kern = kernel_switch(x, smear, gain, resolution)
 
-  n_max=1000 #change later to 256, just for testing purposes
-  delta=(3*smear)/n_max #confirm this is the right measurement
+  n_samples = 1024
 
   #extend arrays
   def extend_arr(x):
-    return kern.repeat(x[kern.newaxis, ...], n_max, axis=0)
+    return kern.repeat(x[kern.newaxis, ...], n_samples, axis=-1)
+
   x=extend_arr(x)
   smear=extend_arr(smear)
-  pedestal=extend_arr(pedestal)
   gain=extend_arr(gain)
   resolution=extend_arr(resolution)
   
-  #do math
-  narray=kern.local_index(x, axis=0) #indices go from 0 to n_max-1
-  narray-=int((n_max/2))
-  result=darkcurrent_response(x-narray*delta,pedestal,gain,resolution)*delta*normal(narray*delta,0,smear)
-  return kern.sum(result, axis=0)
+  delta = 8 * smear / n_samples  # Getting the integration window
+  idx = kern.local_index(x, axis=-1)
+  x_pr = -4 * smear + delta * (idx + 0.5)
+
+  # Given that the computed result will exhibit periodicity within the
+  # integration window, here we compute a simple rolling means with 5 parts
+  return kern.sum(darkcurrent_response(x - x_pr, gain, resolution)*normal(x_pr, 0, smear)*delta,axis=-1)
 
 def sipm_response(
   x: np.float64,
