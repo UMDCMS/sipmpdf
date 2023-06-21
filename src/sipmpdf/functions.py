@@ -266,10 +266,6 @@ def darkcurrent_response_smeared(x: np.float64,
                                  resolution: np.float64 = 1e-4) -> np.float64:
   kern = kernel_switch(x, smear, pedestal, gain, resolution)
 
-  """
-  notes for Grace:
-  inside summation: darkcurrent_response(n*delta,pedestal,gain,resolution)*normal(x-n*delta,0,smear)*delta """
-
   n_max=1000 #change later to 256, just for testing purposes
   delta=(3*smear)/n_max #confirm this is the right measurement
 
