@@ -164,15 +164,16 @@ def binomial_prob(x: np.int64, total: np.int64, prob: np.float64) -> np.float64:
   #assert kern.all(0.0 <= prob) & kern.all(prob <= 1.0)
 
   # Implementing using log-exp to ensure numerical stability
-  return kern.exp(x * kern.log(prob)  \
+  # Where to ensure that x is less than or equal to total, if not return 0
+  return kern.where(x<=total,kern.exp(x * kern.log(prob)  \
                   + (total - x) * kern.log(1 - prob) \
                   + kern.loggamma(total + 1) \
                   - kern.loggamma(x + 1)  \
-                  - kern.loggamma(total - x + 1))
+                  - kern.loggamma(total - x + 1)),0)
 
 
 def ap_response(x: np.float64, 
-                n_ap: np.int64, 
+                n_ap: np.float64, 
                 beta: np.float64) -> np.float64:
   """
   Afterpulse response given a fixed number of after pulses occurs. (with random
@@ -193,10 +194,7 @@ def ap_response(x: np.float64,
   """
   kern = kernel_switch(x, n_ap, beta)
   
-  numerator=kern.power(x,n_ap-1)*kern.exp((-x)/beta)*kern.heaviside(x,1)
-  denominator=kern.math.factorial(n_ap-1)*kern.power(beta,n_ap)
-  
-  return numerator/denominator
+  return kern.where(x>0,kern.exp(kern.log(kern.power(x,n_ap-1))-kern.log(kern.power(beta,n_ap))-kern.loggamma(n_ap)-x/beta),0)
 
 def darkcurrent_response_original(x: np.float64,
                                   gain: np.float64,
@@ -274,7 +272,6 @@ def ap_response_smeared(x: np.float64, smear: np.float64, n_ap: np.int64,
                     ap_response(x=x,n_ap=n_ap,beta=beta))  
 
 @expand_shape
-##Note:this fails to work
 def darkcurrent_response_smeared(x: np.float64,
                                  smear: np.float64,
                                  gain: np.float64,
@@ -285,7 +282,7 @@ def darkcurrent_response_smeared(x: np.float64,
 
   #extend arrays
   def extend_arr(x):
-    return kern.repeat(x[kern.newaxis, ...], n_samples, axis=-1)
+    return kern.repeat(x[kern.newaxis,...], n_samples, axis=0)
 
   x=extend_arr(x)
   smear=extend_arr(smear)
@@ -293,13 +290,72 @@ def darkcurrent_response_smeared(x: np.float64,
   resolution=extend_arr(resolution)
   
   delta = 8 * smear / n_samples  # Getting the integration window
-  idx = kern.local_index(x, axis=-1)
+  idx = kern.local_index(x, axis=0)
   x_pr = -4 * smear + delta * (idx + 0.5)
 
   # Given that the computed result will exhibit periodicity within the
   # integration window, here we compute a simple rolling means with 5 parts
-  return kern.sum(darkcurrent_response(x - x_pr, gain, resolution)*normal(x_pr, 0, smear)*delta,axis=-1)
+  return kern.sum(darkcurrent_response(x - x_pr, gain, resolution)*normal(x_pr, 0, smear)*delta,axis=0)
 
+@expand_shape
+def afterpulsing_summation(x: np.float64,
+                           total: np.int64,
+                           ap_smear: np.float64, ##which should this actually be?
+                           ap_beta: np.float64, 
+                           ap_prob: np.float64,
+                           pedestal: np.float64,
+                           gain: np.float64) ->np.float64:
+  kern = kernel_switch(x, ap_smear, ap_prob, ap_beta, total,pedestal,gain)
+  k=10
+  ##come back to upgrade this later, decide on most effective method to ensure accuracy and not use too much computing power
+  def extend_arr(x):
+    return kern.repeat(x[kern.newaxis,...], k, axis=0)
+    
+  x=extend_arr(x)
+  ap_smear=extend_arr(ap_smear)
+  ap_beta=extend_arr(ap_beta)
+  ap_prob=extend_arr(ap_prob)
+  total=extend_arr(total)
+  pedestal=extend_arr(pedestal)
+  gain=extend_arr(gain)
+  
+  idx = kern.local_index(x, axis=0)
+  idx+=1
+
+  return kern.sum(binomial_prob(x=idx,total=total,prob=ap_prob)*ap_response_smeared(x=x-(pedestal+total*gain),smear=ap_smear,n_ap=idx,beta=ap_beta), axis=0)
+
+def k_summation(
+    x: np.float64,
+    ap_smear: np.float64,
+    ap_beta: np.float64,
+    ap_prob: np.float64,
+    pedestal: np.float64,
+    gain: np.float64,
+    electrical_noise: np.float64, ##clarify this part
+    poisson_mean: np.float64,
+    poisson_borel: np.float64)->np.float64:
+  kern = kernel_switch(x, ap_smear, ap_prob, ap_beta, pedestal, gain, electrical_noise,poisson_mean, poisson_borel)
+  
+  k_max=10
+  ##come back to upgrade this later, decide on most effective method to ensure accuracy and not use too much computing power
+  def extend_arr(x):
+    return kern.repeat(x[kern.newaxis,...], k_max, axis=0)
+    
+  x=extend_arr(x)
+  ap_smear=extend_arr(ap_smear)
+  ap_beta=extend_arr(ap_beta)
+  ap_prob=extend_arr(ap_prob)
+  pedestal=extend_arr(pedestal)
+  gain=extend_arr(gain)
+  electrical_noise=extend_arr(electrical_noise)
+  poisson_mean=extend_arr(poisson_mean)
+  poisson_borel=extend_arr(poisson_borel)
+  
+  idk = kern.local_index(x, axis=0)
+  idk+=1
+
+  return kern.sum(generalized_poisson(k=idk,mean=poisson_mean,borel=poisson_borel)*((binomial_prob(x=0, total=idk, prob=ap_prob)*normal(x=x, mean=pedestal+idk*gain, scale=electrical_noise))+afterpulsing_summation(x=x,total=idk,ap_smear=ap_smear,ap_beta=ap_beta,ap_prob=ap_prob,gain=gain,pedestal=pedestal)),axis=0)
+  
 def sipm_response(
   x: np.float64,
   pedestal: np.float64,
@@ -316,4 +372,17 @@ def sipm_response(
   Using numba for calculation acceleration (the function is difficult to express
   in pure array syntax)
   """
-  pass
+  kern = kernel_switch(x, pedestal, gain, common_noise, pixel_noise, poisson_mean, poisson_borel, ap_prob, ap_beta)
+ 
+  Pdc=0 ##probability of dark current, define here, fix all these values later
+  smear_of_darkcurrent=0 ##define here
+  resolution_of_darkcurrent=0 ##define here
+  l=0 ##define here  
+  ap_smear=0 ##define here
+  electrical_noise=0 ##define_here
+
+  ##replace the values with correct ones later
+  Initial=generalized_poisson(0,poisson_mean,l)*(1-Pdc)*normal(x,pedestal,common_noise)+Pdc*darkcurrent_response_smeared(x,smear_of_darkcurrent,gain,resolution_of_darkcurrent)
+  sums=k_summation(x=x,ap_smear=ap_smear,ap_beta=ap_beta,ap_prob=ap_prob,pedestal=pedestal,gain=gain,electrical_noise=electrical_noise,poisson_mean=poisson_mean, poisson_borel=poisson_borel)
+  
+  return Initial+sums
