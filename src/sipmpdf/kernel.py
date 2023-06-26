@@ -15,6 +15,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import numpy
 import tensorflow
 import scipy.special
+import zfit
 
 import warnings
 
@@ -49,7 +50,9 @@ class kernel_switch():
   def __init__(self, *args, **kwargs):
     args_list = [*args, *kwargs.values()]
     has_np = any([isinstance(x, numpy.ndarray) for x in args_list])
-    has_tf = any([isinstance(x, tensorflow.Tensor) for x in args_list])
+    has_tf = any([(isinstance(x, tensorflow.Tensor)
+                   or isinstance(x, zfit.core.parameter.Parameter))
+                  for x in args_list])
     if has_np and has_tf:
       warnings.warn(
         """
@@ -144,7 +147,6 @@ def expand_shape(np_tf_func):
       [kern.ndim(x) for x in [*args, *kwargs.values()]])
     max_dim_index = kern.argmax(args_rank)
     max_dim_shape = args_shape[max_dim_index]
-    print(max_dim_shape[max_dim_shape != 0])
     max_dim_arr = kern.tofloat64(
       kern.ones(shape=kern.toint32(max_dim_shape[max_dim_shape != 0])))
     args = [x * max_dim_arr for x in args]
