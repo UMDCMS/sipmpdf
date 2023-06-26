@@ -110,7 +110,7 @@ def normal_cdf(x: np.float64,
 
 
 @expand_shape
-def normal_smeared_poisson(x: np.float64,
+def sipm_response_no_dark_no_ap(x: np.float64,
                            pedestal: np.float64,
                            gain: np.float64,
                            common_noise: np.float64,
@@ -302,12 +302,9 @@ def afterpulsing_summation(x: np.float64,
                            total: np.int64,
                            ap_smear: np.float64, ##which should this actually be?
                            ap_beta: np.float64, 
-                           ap_prob: np.float64,
-                           pedestal: np.float64,
-                           gain: np.float64) ->np.float64:
-  kern = kernel_switch(x, ap_smear, ap_prob, ap_beta, total,pedestal,gain)
+                           ap_prob: np.float64) ->np.float64:
+  kern = kernel_switch(x, ap_smear, ap_prob, ap_beta, total)
   k=10
-  ##come back to upgrade this later, decide on most effective method to ensure accuracy and not use too much computing power
   def extend_arr(x):
     return kern.repeat(x[kern.newaxis,...], k, axis=0)
     
@@ -316,13 +313,11 @@ def afterpulsing_summation(x: np.float64,
   ap_beta=extend_arr(ap_beta)
   ap_prob=extend_arr(ap_prob)
   total=extend_arr(total)
-  pedestal=extend_arr(pedestal)
-  gain=extend_arr(gain)
   
   idx = kern.local_index(x, axis=0)
   idx+=1
 
-  return kern.sum(binomial_prob(x=idx,total=total,prob=ap_prob)*ap_response_smeared(x=x-(pedestal+total*gain),smear=ap_smear,n_ap=idx,beta=ap_beta), axis=0)
+  return kern.sum(binomial_prob(x=idx,total=total,prob=ap_prob)*ap_response_smeared(x=x,smear=ap_smear,n_ap=idx,beta=ap_beta), axis=0)
 
 def k_summation(
     x: np.float64,
@@ -336,8 +331,8 @@ def k_summation(
     poisson_borel: np.float64)->np.float64:
   kern = kernel_switch(x, common_noise, pixel_noise, ap_prob, ap_beta, pedestal, gain, poisson_mean, poisson_borel)
   
-  k_max=10
-  ##come back to upgrade this later, decide on most effective method to ensure accuracy and not use too much computing power
+  k_max = kern.reduce_max(poisson_mean, axis=None)
+  k_max = kern.toint32(kern.rint(k_max + 5 * kern.sqrt(k_max) + 15))
   def extend_arr(x):
     return kern.repeat(x[kern.newaxis,...], k_max, axis=0)
     
@@ -351,11 +346,10 @@ def k_summation(
   poisson_mean=extend_arr(poisson_mean)
   poisson_borel=extend_arr(poisson_borel)
   
-  idk = kern.local_index(x, axis=0)
-  idk+=1
-  sigma_k = kern.sqrt(common_noise**2 + idk*pixel_noise**2)
+  idk=kern.local_index(x,axis=0)+1
+  sigma_k=kern.sqrt(common_noise**2 + idk*pixel_noise**2)
 
-  return kern.sum(generalized_poisson(k=idk,mean=poisson_mean,borel=poisson_borel)*((binomial_prob(x=0, total=idk, prob=ap_prob)*normal(x=x, mean=pedestal+idk*gain, scale=sigma_k))+afterpulsing_summation(x=x,total=idk,ap_smear=common_noise,ap_beta=ap_beta,ap_prob=ap_prob,gain=gain,pedestal=pedestal)),axis=0)
+  return kern.sum(generalized_poisson(k=idk,mean=poisson_mean,borel=poisson_borel)*((binomial_prob(x=0, total=idk, prob=ap_prob)*normal(x=x, mean=pedestal+idk*gain, scale=sigma_k))+afterpulsing_summation(x=x-(pedestal+idk*gain),total=idk,ap_smear=common_noise,ap_beta=ap_beta,ap_prob=ap_prob)),axis=0)
   
 def sipm_response(
   x: np.float64,
@@ -376,10 +370,25 @@ def sipm_response(
   in pure array syntax)
   """
   kern = kernel_switch(x, pedestal, gain, common_noise, pixel_noise, poisson_mean, poisson_borel, ap_prob, ap_beta, dc_prob, dc_res)
- 
   dc_smear=kern.sqrt(common_noise**2 + pixel_noise**2)
   
-  Initial=generalized_poisson(k=0,mean=poisson_mean,borel=poisson_borel)*(1-dc_prob)*normal(x=x,mean=pedestal,scale=common_noise)+dc_prob*darkcurrent_response_smeared(x=x,smear=dc_smear,gain=gain,resolution=dc_res)
-  sums=k_summation(x=x,common_noise=common_noise,pixel_noise=pixel_noise,ap_beta=ap_beta,ap_prob=ap_prob,pedestal=pedestal,gain=gain,poisson_mean=poisson_mean, poisson_borel=poisson_borel)
+  no_pe_discharge_response=generalized_poisson(k=kern.zeros_like(x),mean=poisson_mean,borel=poisson_borel)*(1-dc_prob)*normal(x=x,mean=pedestal,scale=common_noise)+dc_prob*darkcurrent_response_smeared(x=x,smear=dc_smear,gain=gain,resolution=dc_res)
+  pe_discharge_response=k_summation(x=x,common_noise=common_noise,pixel_noise=pixel_noise,ap_beta=ap_beta,ap_prob=ap_prob,pedestal=pedestal,gain=gain,poisson_mean=poisson_mean, poisson_borel=poisson_borel)
   
-  return Initial+sums
+  return no_pe_discharge_response+pe_discharge_response
+
+def sipm_response_no_dark( x: np.float64,
+  pedestal: np.float64,
+  gain: np.float64,
+  common_noise: np.float64,
+  pixel_noise: np.float64,
+  poisson_mean: np.float64,
+  poisson_borel: np.float64,
+  ap_prob: np.float64,
+  ap_beta: np.float64,
+  dc_res: np.float64 = 1e-4
+) -> np.float64:
+  kern=kernel_switch(x, pedestal, gain, common_noise, pixel_noise, poisson_mean, poisson_borel, ap_prob, ap_beta, dc_res)   
+  dc_prob=kern.zeros_like(x)
+  
+  return sipm_response(x=x, pedestal=pedestal, gain=gain, common_noise=common_noise, pixel_noise=pixel_noise, poisson_mean=poisson_mean, poisson_borel=poisson_borel, ap_prob=ap_prob, ap_beta=ap_beta, dc_res=dc_res, dc_prob=dc_prob)
