@@ -326,15 +326,15 @@ def afterpulsing_summation(x: np.float64,
 
 def k_summation(
     x: np.float64,
-    ap_smear: np.float64,
+    common_noise: np.float64,
+    pixel_noise: np.float64,
     ap_beta: np.float64,
     ap_prob: np.float64,
     pedestal: np.float64,
     gain: np.float64,
-    electrical_noise: np.float64, ##clarify this part
     poisson_mean: np.float64,
     poisson_borel: np.float64)->np.float64:
-  kern = kernel_switch(x, ap_smear, ap_prob, ap_beta, pedestal, gain, electrical_noise,poisson_mean, poisson_borel)
+  kern = kernel_switch(x, common_noise, pixel_noise, ap_prob, ap_beta, pedestal, gain, poisson_mean, poisson_borel)
   
   k_max=10
   ##come back to upgrade this later, decide on most effective method to ensure accuracy and not use too much computing power
@@ -342,19 +342,20 @@ def k_summation(
     return kern.repeat(x[kern.newaxis,...], k_max, axis=0)
     
   x=extend_arr(x)
-  ap_smear=extend_arr(ap_smear)
+  common_noise=extend_arr(common_noise)
+  pixel_noise=extend_arr(pixel_noise)
   ap_beta=extend_arr(ap_beta)
   ap_prob=extend_arr(ap_prob)
   pedestal=extend_arr(pedestal)
   gain=extend_arr(gain)
-  electrical_noise=extend_arr(electrical_noise)
   poisson_mean=extend_arr(poisson_mean)
   poisson_borel=extend_arr(poisson_borel)
   
   idk = kern.local_index(x, axis=0)
   idk+=1
+  sigma_k = kern.sqrt(common_noise**2 + idk*pixel_noise**2)
 
-  return kern.sum(generalized_poisson(k=idk,mean=poisson_mean,borel=poisson_borel)*((binomial_prob(x=0, total=idk, prob=ap_prob)*normal(x=x, mean=pedestal+idk*gain, scale=electrical_noise))+afterpulsing_summation(x=x,total=idk,ap_smear=ap_smear,ap_beta=ap_beta,ap_prob=ap_prob,gain=gain,pedestal=pedestal)),axis=0)
+  return kern.sum(generalized_poisson(k=idk,mean=poisson_mean,borel=poisson_borel)*((binomial_prob(x=0, total=idk, prob=ap_prob)*normal(x=x, mean=pedestal+idk*gain, scale=sigma_k))+afterpulsing_summation(x=x,total=idk,ap_smear=common_noise,ap_beta=ap_beta,ap_prob=ap_prob,gain=gain,pedestal=pedestal)),axis=0)
   
 def sipm_response(
   x: np.float64,
@@ -366,23 +367,19 @@ def sipm_response(
   poisson_borel: np.float64,
   ap_prob: np.float64,
   ap_beta: np.float64,
+  dc_prob: np.float64,
+  dc_res: np.float64 = 1e-4
 ) -> np.float64:
   """
   Main function for the general SiPM low light response probability function.
   Using numba for calculation acceleration (the function is difficult to express
   in pure array syntax)
   """
-  kern = kernel_switch(x, pedestal, gain, common_noise, pixel_noise, poisson_mean, poisson_borel, ap_prob, ap_beta)
+  kern = kernel_switch(x, pedestal, gain, common_noise, pixel_noise, poisson_mean, poisson_borel, ap_prob, ap_beta, dc_prob, dc_res)
  
-  Pdc=0 ##probability of dark current, define here, fix all these values later
-  smear_of_darkcurrent=0 ##define here
-  resolution_of_darkcurrent=0 ##define here
-  l=0 ##define here  
-  ap_smear=0 ##define here
-  electrical_noise=0 ##define_here
-
-  ##replace the values with correct ones later
-  Initial=generalized_poisson(0,poisson_mean,l)*(1-Pdc)*normal(x,pedestal,common_noise)+Pdc*darkcurrent_response_smeared(x,smear_of_darkcurrent,gain,resolution_of_darkcurrent)
-  sums=k_summation(x=x,ap_smear=ap_smear,ap_beta=ap_beta,ap_prob=ap_prob,pedestal=pedestal,gain=gain,electrical_noise=electrical_noise,poisson_mean=poisson_mean, poisson_borel=poisson_borel)
+  dc_smear=kern.sqrt(common_noise**2 + pixel_noise**2)
+  
+  Initial=generalized_poisson(k=0,mean=poisson_mean,borel=poisson_borel)*(1-dc_prob)*normal(x=x,mean=pedestal,scale=common_noise)+dc_prob*darkcurrent_response_smeared(x=x,smear=dc_smear,gain=gain,resolution=dc_res)
+  sums=k_summation(x=x,common_noise=common_noise,pixel_noise=pixel_noise,ap_beta=ap_beta,ap_prob=ap_prob,pedestal=pedestal,gain=gain,poisson_mean=poisson_mean, poisson_borel=poisson_borel)
   
   return Initial+sums
