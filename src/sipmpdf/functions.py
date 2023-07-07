@@ -589,11 +589,10 @@ def sipm_response(x: np.float64,
   dc_smear = kern.sqrt(common_noise**2 + pixel_noise**2)
 
   no_pe_discharge_response = generalized_poisson(
-    k=kern.zeros_like(x), mean=poisson_mean,
-    borel=poisson_borel) * (1 - dc_prob) * normal(
-      x=x, mean=pedestal,
-      scale=common_noise) + dc_prob * darkcurrent_response_smeared(
-        x=x, smear=dc_smear, gain=gain, resolution=dc_res)
+    k=kern.zeros_like(x), mean=poisson_mean, borel=poisson_borel) * (
+      (1 - dc_prob) * normal(x=x, mean=pedestal, scale=common_noise) +
+      dc_prob * darkcurrent_response_smeared(
+        x=x, smear=dc_smear, gain=gain, resolution=dc_res))
   pe_discharge_response = _k_summation(x=x,
                                        common_noise=common_noise,
                                        pixel_noise=pixel_noise,
@@ -607,13 +606,9 @@ def sipm_response(x: np.float64,
   return no_pe_discharge_response + pe_discharge_response
 
 
-def sipm_response_no_dark(x: np.float64,
-                          pedestal: np.float64,
-                          gain: np.float64,
-                          common_noise: np.float64,
-                          pixel_noise: np.float64,
-                          poisson_mean: np.float64,
-                          poisson_borel: np.float64,
+def sipm_response_no_dark(x: np.float64, pedestal: np.float64, gain: np.float64,
+                          common_noise: np.float64, pixel_noise: np.float64,
+                          poisson_mean: np.float64, poisson_borel: np.float64,
                           ap_prob: np.float64,
                           ap_beta: np.float64) -> np.float64:
   """
