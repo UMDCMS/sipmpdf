@@ -529,7 +529,7 @@ def _k_summation(x: np.float64, common_noise: np.float64,
   return kern.sum(
     generalized_poisson(k=idk, mean=poisson_mean, borel=poisson_borel) *
     _full_afterpulse_response(x=x,
-                              total=total,
+                              total=idk,
                               ap_smear=common_noise,
                               ap_beta=ap_beta,
                               ap_prob=ap_prob,
@@ -615,8 +615,7 @@ def sipm_response_no_dark(x: np.float64,
                           poisson_mean: np.float64,
                           poisson_borel: np.float64,
                           ap_prob: np.float64,
-                          ap_beta: np.float64,
-                          dc_res: np.float64 = 1e-4) -> np.float64:
+                          ap_beta: np.float64) -> np.float64:
   """
   SiPM low light probability density function, excluding dark current effects.
   
