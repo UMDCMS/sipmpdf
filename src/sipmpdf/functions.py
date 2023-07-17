@@ -427,9 +427,8 @@ def _afterpulsing_summation(x: np.float64, total: np.int64, sigma_k: np.float64,
 
 
 def _full_afterpulse_response(x: np.float64, total: np.int64,
-                              ap_beta: np.float64,
-                              ap_prob: np.float64, pedestal: np.float64,
-                              gain: np.float64,
+                              ap_beta: np.float64, ap_prob: np.float64,
+                              pedestal: np.float64, gain: np.float64,
                               sigma_k: np.float64) -> np.float64:
   """ 
   Summation of the afterpulse response (with random noise) weighted by the binomial distribution for n_ap from 0 to 10
@@ -455,11 +454,11 @@ def _full_afterpulse_response(x: np.float64, total: np.int64,
   numpy.float64
       Full afterpulse response
   """
-  kern = kernel_switch(x, total, ap_beta, ap_prob, pedestal, gain,
-                       sigma_k)
+  kern = kernel_switch(x, total, ap_beta, ap_prob, pedestal, gain, sigma_k)
   return _afterpulsing_summation(
     x=x - (pedestal + total * gain),
-    total=total, sigma_k=sigma_k,
+    total=total,
+    sigma_k=sigma_k,
     ap_beta=ap_beta,
     ap_prob=ap_prob) + binomial_prob(
       x=kern.zeros_like(total), total=total, prob=ap_prob) * normal(
