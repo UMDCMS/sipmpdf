@@ -44,12 +44,7 @@ def generalized_poisson(k: np.int64,
   """
   kern = kernel_switch(k, mean, borel)
 
-  # Range sanity checks
-  # assert kern.all(k >= 0)
-  # assert kern.all(mean > 0)
-  # assert kern.all(borel >= 0)
   # Use the loggamma function to ensure numerical stability
-
   return kern.exp(
     kern.log(mean) \
     + (k - 1) * kern.log(mean + k * borel)  \
@@ -78,7 +73,6 @@ def normal(x: np.float64,
       The probability density of the observable x
   """
   kern = kernel_switch(x, mean, scale)
-  # assert kern.all(scale > 0)
   return 1 / (scale * kern.sqrt(2 * kern.pi)) * kern.exp(-(
     (x - mean) / scale)**2 / 2)
 
@@ -104,9 +98,6 @@ def normal_cdf(x: np.float64,
       Function value of the CDF
   """
   kern = kernel_switch(x, mean, scale)
-  # Range sanity checks
-  # assert kern.all(scale > 1.0)
-
   return (1 + kern.erf((x - mean) / kern.sqrt(scale))) / 2
 
 
@@ -119,7 +110,7 @@ def sipm_response_no_dark_no_ap(x: np.float64,
                                 poisson_mean: np.float64,
                                 poisson_borel: np.float64 = 0) -> np.float64:
   """
-  Testing function to give sipm response with no dark current or afterpulsing 
+  Testing function to give sipm response with no dark current or afterpulsing
 
   Parameters
   ----------
@@ -149,17 +140,14 @@ def sipm_response_no_dark_no_ap(x: np.float64,
   n_max = kern.reduce_max(poisson_mean, axis=None)
   n_max = kern.toint32(kern.rint(n_max + 5 * kern.sqrt(n_max) + 15))
 
-  def extend_arr(x):
-    return kern.repeat(x[kern.newaxis, ...], n_max, axis=0)
-
   # Extending input array structure
-  x = extend_arr(x)
-  pedestal = extend_arr(pedestal)
-  gain = extend_arr(gain)
-  common_noise = extend_arr(common_noise)
-  pixel_noise = extend_arr(pixel_noise)
-  poisson_mean = extend_arr(poisson_mean)
-  poisson_borel = extend_arr(poisson_borel)
+  x = kern.repeat_axis0(x, n_max)
+  pedestal = kern.repeat_axis0(pedestal, n_max)
+  gain = kern.repeat_axis0(gain, n_max)
+  common_noise = kern.repeat_axis0(common_noise, n_max)
+  pixel_noise = kern.repeat_axis0(pixel_noise, n_max)
+  poisson_mean = kern.repeat_axis0(poisson_mean, n_max)
+  poisson_borel = kern.repeat_axis0(poisson_borel, n_max)
 
   # Constructing the discharge count array structure
   n_pe = kern.tofloat64(kern.local_index(poisson_mean, axis=0))
@@ -185,18 +173,17 @@ def binomial_prob(x: np.int64, total: np.int64, prob: np.float64) -> np.float64:
       Underlying probability that events pass selection
   """
   kern = kernel_switch(x, total, prob)
-  # Range sanity check
-  #assert kern.all(0.0 <= x) & kern.all(0.0 < total)
-  #assert kern.all(0.0 <= prob) & kern.all(prob <= 1.0)
-
-  # Implementing using log-exp to ensure numerical stability
-  # Where to ensure that x is less than or equal to total, if not return 0
+  # Implementing using log-exp to ensure numerical stability. kern.where to
+  # ensure that x is less than or equal to total, if not return 0
   x = kern.tofloat64(x)
-  return kern.where(x<=total,kern.exp(x * kern.log(prob)  \
-                  + (total - x) * kern.log(1 - prob) \
-                  + kern.loggamma(total + 1) \
-                  - kern.loggamma(x + 1)  \
-                  - kern.loggamma(total - x + 1)),0)
+  return kern.where(
+    x <= total,  #
+    kern.exp(  #
+      x * kern.log(prob)  #
+      + (total - x) * kern.log(1 - prob)  #
+      + kern.loggamma(total + 1)  #
+      - kern.loggamma(x + 1)  #
+      - kern.loggamma(total - x + 1)), 0)
 
 
 def ap_response(x: np.float64, n_ap: np.float64, beta: np.float64) -> np.float64:
@@ -275,7 +262,7 @@ def darkcurrent_response(x: np.float64,
   - If x is in the "nominal region" of (x > pedestal + 0.01 * gain) and (x <
     pedestal - 0.01 * gain), we will return the original response function.
   - If x is in the "peaking regions", the response is substituted with a Gaussian that is x50 wider than the resolution factor.
-  
+
   Parameters
   ----------
   x : np.float64
@@ -289,7 +276,7 @@ def darkcurrent_response(x: np.float64,
   -------
   np.float64
       Smoothed out probability density of observing a dark current response
-  
+
   """
   kern = kernel_switch(x, gain, resolution)
   coarse_res = resolution * 50
@@ -311,7 +298,7 @@ def ap_response_smeared(x: np.float64, smear: np.float64, n_ap: np.int64,
                         beta: np.float64) -> np.float64:
   """
   Afterpulse response, assuming a fixed number of afterpulses, taking into account random noise effects.
-  
+
   Parameters
   ----------
   x : np.float64
@@ -364,15 +351,10 @@ def darkcurrent_response_smeared(x: np.float64,
   kern = kernel_switch(x, smear, gain, resolution)
 
   n_samples = 1024
-
-  #extend arrays
-  def extend_arr(x):
-    return kern.repeat(x[kern.newaxis, ...], n_samples, axis=0)
-
-  x = extend_arr(x)
-  smear = extend_arr(smear)
-  gain = extend_arr(gain)
-  resolution = extend_arr(resolution)
+  x = kern.repeat_axis0(x, n_samples)
+  smear = kern.repeat_axis0(smear, n_samples)
+  gain = kern.repeat_axis0(gain, n_samples)
+  resolution = kern.repeat_axis0(resolution, n_samples)
 
   delta = 8 * smear / n_samples  # Getting the integration window
   idx = kern.local_index(x, axis=0)
@@ -388,8 +370,10 @@ def _afterpulsing_summation(x: np.float64, total: np.int64, sigma_k: np.float64,
                             ap_beta: np.float64,
                             ap_prob: np.float64) -> np.float64:
   """
-  Summation of the afterpulse response (with random noies) weighted by the binomial distribution for n_ap from 1 to 10
-  
+  Summation of the afterpulse response (with random noise) weighted by the
+  binomial distribution for number of afterpulses up to 10 (expected ap_prob to
+  be small).
+
   Parameters
   ----------
   x : np.float64
@@ -405,20 +389,17 @@ def _afterpulsing_summation(x: np.float64, total: np.int64, sigma_k: np.float64,
   """
 
   kern = kernel_switch(x, sigma_k, ap_prob, ap_beta, total)
-  k = 10
 
-  #extend arrays
-  def extend_arr(x):
-    return kern.repeat(x[kern.newaxis, ...], k, axis=0)
+  # Fixing maximum number of afterpulses considered to be 10
+  ap_max = 10
+  x = kern.repeat_axis0(x, ap_max)
+  sigma_k = kern.repeat_axis0(sigma_k, ap_max)
+  ap_beta = kern.repeat_axis0(ap_beta, ap_max)
+  ap_prob = kern.repeat_axis0(ap_prob, ap_max)
+  total = kern.repeat_axis0(total, ap_max)
 
-  x = extend_arr(x)
-  sigma_k = extend_arr(sigma_k)
-  ap_beta = extend_arr(ap_beta)
-  ap_prob = extend_arr(ap_prob)
-  total = extend_arr(total)
-
-  idx = kern.local_index(x, axis=0)
-  idx += 1
+  # Getting array for number of
+  idx = kern.local_index(x, axis=0) + 1
 
   return kern.sum(
     binomial_prob(x=idx, total=total, prob=ap_prob) *
@@ -430,9 +411,12 @@ def _full_afterpulse_response(x: np.float64, total: np.int64,
                               ap_beta: np.float64, ap_prob: np.float64,
                               pedestal: np.float64, gain: np.float64,
                               sigma_k: np.float64) -> np.float64:
-  """ 
-  Summation of the afterpulse response (with random noise) weighted by the binomial distribution for n_ap from 0 to 10
-  
+  """
+  Summation of the afterpulse response (with random noise) weighted by the
+  binomial distribution for number of afterpulses up to 10 (expected ap_prob to
+  be small). Helper function to take into account the pedestal shift, the gain
+  shift and the variable noise factor.
+
   Parameters
   ----------
   x : numpy.float64
@@ -471,9 +455,10 @@ def _k_summation(x: np.float64, common_noise: np.float64,
                  ap_prob: np.float64, pedestal: np.float64, gain: np.float64,
                  poisson_mean: np.float64,
                  poisson_borel: np.float64) -> np.float64:
-  """ 
-  Summation in the final SiPM response for number of primary P.E.s k>=1, dark current at k==0 is handled by a different function
-  
+  """
+  Summation in the SiPM response for number of primary P.E.s k>=1, dark current
+  at k==0 is handled by a different function.
+
   Parameters
   ----------
   x : numpy.float64
@@ -505,18 +490,15 @@ def _k_summation(x: np.float64, common_noise: np.float64,
   k_max = kern.reduce_max(poisson_mean, axis=None)
   k_max = kern.toint32(kern.rint(k_max + 5 * kern.sqrt(k_max) + 15))
 
-  def extend_arr(x):
-    return kern.repeat(x[kern.newaxis, ...], k_max, axis=0)
-
-  x = extend_arr(x)
-  common_noise = extend_arr(common_noise)
-  pixel_noise = extend_arr(pixel_noise)
-  ap_beta = extend_arr(ap_beta)
-  ap_prob = extend_arr(ap_prob)
-  pedestal = extend_arr(pedestal)
-  gain = extend_arr(gain)
-  poisson_mean = extend_arr(poisson_mean)
-  poisson_borel = extend_arr(poisson_borel)
+  x = kern.repeat_axis0(x, k_max)
+  common_noise = kern.repeat_axis0(common_noise, k_max)
+  pixel_noise = kern.repeat_axis0(pixel_noise, k_max)
+  ap_beta = kern.repeat_axis0(ap_beta, k_max)
+  ap_prob = kern.repeat_axis0(ap_prob, k_max)
+  pedestal = kern.repeat_axis0(pedestal, k_max)
+  gain = kern.repeat_axis0(gain, k_max)
+  poisson_mean = kern.repeat_axis0(poisson_mean, k_max)
+  poisson_borel = kern.repeat_axis0(poisson_borel, k_max)
 
   idk = kern.local_index(x, axis=0) + 1
   sigma_k = kern.sqrt(
@@ -547,7 +529,7 @@ def sipm_response(x: np.float64,
                   dc_res: np.float64 = 1e-4) -> np.float64:
   """
   SiPM lowlight response probability density function
-  
+
   Parameters
   ----------
   x : numpy.float64
@@ -583,11 +565,16 @@ def sipm_response(x: np.float64,
                        dc_res)
   dc_smear = kern.sqrt(common_noise**2 + pixel_noise**2)
 
-  no_pe_discharge_response = generalized_poisson(
-    k=kern.zeros_like(x), mean=poisson_mean, borel=poisson_borel) * (
-      (1 - dc_prob) * normal(x=x, mean=pedestal, scale=common_noise) +
-      dc_prob * darkcurrent_response_smeared(
-        x=x, smear=dc_smear, gain=gain, resolution=dc_res))
+  poisson_weight = generalized_poisson(k=kern.zeros_like(x),
+                                       mean=poisson_mean,
+                                       borel=poisson_borel)
+  norm_response = normal(x=x, mean=pedestal, scale=common_noise)
+  dc_response = darkcurrent_response_smeared(x=x,
+                                             smear=dc_smear,
+                                             gain=gain,
+                                             resolution=dc_res)
+  no_pe_discharge_response = poisson_weight * (
+    (1 - dc_prob) * norm_response + dc_prob * dc_response)
   pe_discharge_response = _k_summation(x=x,
                                        common_noise=common_noise,
                                        pixel_noise=pixel_noise,
@@ -608,7 +595,7 @@ def sipm_response_no_dark(x: np.float64, pedestal: np.float64, gain: np.float64,
                           ap_beta: np.float64) -> np.float64:
   """
   SiPM low light probability density function, excluding dark current effects.
-  
+
   Parameters
   ----------
   x : numpy.float64

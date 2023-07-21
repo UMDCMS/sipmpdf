@@ -41,7 +41,9 @@ __tensorflow_attr_map__ = {
   'toint32': lambda x: tensorflow.cast(x, tensorflow.int32),
   'tofloat64': lambda x: tensorflow.cast(x, tensorflow.float64),
   'ndim': tensorflow.rank,
-  'make_array': lambda x: tensorflow.convert_to_tensor(x)
+  'make_array': lambda x: tensorflow.convert_to_tensor(x),
+  'sum': tensorflow.math.reduce_sum,
+  'power': tensorflow.math.pow,
 }
 _ = [setattr(tensorflow, k, v) for k, v in __tensorflow_attr_map__.items()]
 
@@ -81,6 +83,10 @@ class kernel_switch():
         return getattr(self._default_lib.experimental.numpy, attr_name)
 
     # Checking local implementations
+
+    # Common implementation that has same syntax between numpy and tensorflow
+    # (should be implemented as non-static method, as it requires the
+    # _default_lib object to switch between kernels)
     if self._default_lib is numpy:
       if hasattr(kernel_switch, '_np_' + attr_name):
         return getattr(kernel_switch, '_np_' + attr_name)
@@ -88,13 +94,25 @@ class kernel_switch():
       if hasattr(kernel_switch, '_tf_' + attr_name):
         return getattr(kernel_switch, '_tf_' + attr_name)
 
-    raise AttributeError(
-      f'Method {attr_name} not found in module {self._default_lib.__name__}! And has not been implemented by the helper class'
-    )
+    if hasattr(self, '_common_' + attr_name):
+      return getattr(self, '_common_' + attr_name)
+    else:
+      raise AttributeError(
+        f'Method {attr_name} not found in module {self._default_lib.__name__}! And has not been implemented by the helper class'
+      )
 
   """
-  Additional functions that are more the 1-liners
+  Additional functions that are more simple 1-liners
   """
+
+  def _common_repeat_axis0(self, array, n_repeat):
+    """
+    Extending the array at the outer-most dimension by repeating the content a
+    specific number of times
+    """
+    return self._default_lib.repeat(array[self._default_lib.newaxis, ...],
+                                    n_repeat,
+                                    axis=0)
 
   @staticmethod
   def _np_local_index(arr, axis=0):
