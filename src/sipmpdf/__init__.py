@@ -34,4 +34,4 @@ if gpus:
     except RuntimeError as e:
         print(e)
 
-from . import functions, generate,  kernel, pdf
+from . import functions, generate, kernel, pdf
