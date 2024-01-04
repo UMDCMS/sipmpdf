@@ -8,11 +8,11 @@ easier more feature rich and easier to debug.
 """
 
 # Place here to suppress warning message
-import zfit
-import tensorflow
-import scipy.special
-import numpy
 import warnings
+import numpy
+import scipy.special
+import tensorflow
+import zfit
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
@@ -155,7 +155,6 @@ class kernel_switch:
         else:
             post = kernel_switch._local_index_einsuminfo_[-(axis + 1)]
             return tensorflow.einsum(
-                #
                 f"i,...i{post}->...i{post}", index, tensorflow.ones_like(arr)
             )
             raise NotImplementedError(

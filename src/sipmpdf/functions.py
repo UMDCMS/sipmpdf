@@ -249,7 +249,6 @@ def darkcurrent_response_original(
     left = 1 / x
     right = 1 / (gain - x)
     norm = 2 * (kern.log(1 - resolution) - kern.log(resolution))
-    #
     return kern.where(((x > eps) & (x < (gain - eps))), (left + right) / norm, 0)
 
 
