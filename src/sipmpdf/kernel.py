@@ -8,16 +8,15 @@ easier more feature rich and easier to debug.
 """
 
 # Place here to suppress warning message
+import zfit
+import tensorflow
+import scipy.special
+import numpy
+import warnings
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
-import warnings
-
-import numpy
-import scipy.special
-import tensorflow
-import zfit
 
 # Additional names for numpy methods to map special function names. These should
 # be simple 1-liner functions
@@ -64,7 +63,6 @@ class kernel_switch:
         if has_np and has_tf:
             warnings.warn(
                 """
-
                 Running both numpy and tensorflow arrays, we will use numpy.
                 This may have performance penalties if you you are loading in
                 large arrays!
@@ -146,7 +144,8 @@ class kernel_switch:
             )
 
         # Getting the initial index
-        index = tensorflow.range(0, tensorflow.shape(arr)[axis], dtype=arr.dtype)
+        index = tensorflow.range(0, tensorflow.shape(arr)[
+                                 axis], dtype=arr.dtype)
 
         if axis >= 0:
             pre = kernel_switch._local_index_einsuminfo_[axis]
@@ -156,9 +155,11 @@ class kernel_switch:
         else:
             post = kernel_switch._local_index_einsuminfo_[-(axis + 1)]
             return tensorflow.einsum(
-                f"i,...i{post}->...i{post}", index, tensorflow.ones_like(arr)  #
+                #
+                f"i,...i{post}->...i{post}", index, tensorflow.ones_like(arr)
             )
-        raise NotImplementedError("Does not know hot to handled rank6 tensors!")
+            raise NotImplementedError(
+                "Does not know hot to handled rank6 tensors!")
 
 
 def expand_shape(np_tf_func):
@@ -174,9 +175,11 @@ def expand_shape(np_tf_func):
         # Assuming we will be working with no-more than rank 5 tensors #
         # TODO: generalized arbitrary dimensions.
         args_shape = kern.make_array(
-            [kern.pad(kern.shape(x), [(0, 5)])[:5] for x in [*args, *kwargs.values()]]
+            [kern.pad(kern.shape(x), [(0, 5)])[:5]
+             for x in [*args, *kwargs.values()]]
         )
-        args_rank = kern.make_array([kern.ndim(x) for x in [*args, *kwargs.values()]])
+        args_rank = kern.make_array([kern.ndim(x)
+                                    for x in [*args, *kwargs.values()]])
         max_dim_index = kern.argmax(args_rank)
         max_dim_shape = args_shape[max_dim_index]
         max_dim_arr = kern.tofloat64(

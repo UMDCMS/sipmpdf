@@ -249,7 +249,8 @@ def darkcurrent_response_original(
     left = 1 / x
     right = 1 / (gain - x)
     norm = 2 * (kern.log(1 - resolution) - kern.log(resolution))
-    return kern.where(((x > eps) & (x < (gain - eps))), (left + right) / norm, 0)  #
+    #
+    return kern.where(((x > eps) & (x < (gain - eps))), (left + right) / norm, 0)
 
 
 def darkcurrent_response(
@@ -547,7 +548,8 @@ def _k_summation(
     poisson_borel = kern.repeat_axis0(poisson_borel, k_max)
 
     idk = kern.local_index(x, axis=0) + 1
-    sigma_k = kern.sqrt(kern.power(common_noise, 2) + idk * kern.power(pixel_noise, 2))
+    sigma_k = kern.sqrt(kern.power(common_noise, 2) +
+                        idk * kern.power(pixel_noise, 2))
 
     return kern.sum(
         generalized_poisson(k=idk, mean=poisson_mean, borel=poisson_borel)
