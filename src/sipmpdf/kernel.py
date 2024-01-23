@@ -64,6 +64,7 @@ class kernel_switch:
         if has_np and has_tf:
             warnings.warn(
                 """
+
                 Running both numpy and tensorflow arrays, we will use numpy.
                 This may have performance penalties if you you are loading in
                 large arrays!
