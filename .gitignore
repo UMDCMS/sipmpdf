@@ -1,2 +1,5 @@
 src/sipmpdf/__pycache__/*
 src/sipmpdf/version.py
+
+# Removing editor specific settings
+.vscode
