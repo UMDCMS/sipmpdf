@@ -156,20 +156,10 @@ class kernel_switch:
         else:
             post = kernel_switch._local_index_einsuminfo_[-(axis + 1)]
             return tensorflow.einsum(
-<< << << < HEAD
-                f"i,...i{post}->...i{post}", index, tensorflow.ones_like(arr)
-            )
-            raise NotImplementedError(
-                "Does not know hot to handled rank6 tensors!")
-
-
-== == == =
-                #
                 f"i,...i{post}->...i{post}", index, tensorflow.ones_like(arr)
             )
         raise NotImplementedError(
             "Does not know hot to handled rank6 tensors!")
->>>>>>> 91e1434 (Switching to black.isort for formatting)
 
 
 def expand_shape(np_tf_func):
