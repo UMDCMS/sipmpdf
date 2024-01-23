@@ -9,12 +9,7 @@ However, since numpy is easier to debug with, the functions here will have a
 simple switch between numpy/scipy and tensorflow kernels.
 
 """
-import warnings
-from typing import Optional
-
 import numpy as np
-import scipy.special
-import tensorflow as tf
 
 from .kernel import expand_shape, kernel_switch
 

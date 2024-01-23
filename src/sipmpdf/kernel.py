@@ -64,9 +64,10 @@ class kernel_switch:
         if has_np and has_tf:
             warnings.warn(
                 """
-     Running both numpy and tensorflow arrays, we will use numpy. This may have
-     performance penalties if you you are loading in large arrays!
-     """,
+                Running both numpy and tensorflow arrays, we will use numpy.
+                This may have performance penalties if you you are loading in
+                large arrays!
+                """,
                 UserWarning,
             )
 
@@ -92,9 +93,9 @@ class kernel_switch:
 
         # Checking local implementations
 
-        # Common implementation that has same syntax between numpy and tensorflow
-        # (should be implemented as non-static method, as it requires the
-        # _default_lib object to switch between kernels)
+        # Common implementation that has same syntax between numpy and
+        # tensorflow and should be implemented as non-static method, as it
+        # requires the _default_lib object to switch between kernels
         if self._default_lib is numpy:
             if hasattr(kernel_switch, "_np_" + attr_name):
                 return getattr(kernel_switch, "_np_" + attr_name)
@@ -110,8 +111,8 @@ class kernel_switch:
             )
 
     """
-  Additional functions that are more simple 1-liners
-  """
+    Additional functions that are more simple 1-liners
+    """
 
     def _common_repeat_axis0(self, array, n_repeat):
         """

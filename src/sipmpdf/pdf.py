@@ -4,13 +4,12 @@ pdf.py
 SiPM response functions as a zfit.pdf.ZPDF extended class for user level fits.
 
 """
-
 import zfit
 
 from . import functions as f
 
 
-class SiPMResponse_NoDCAP_PDF(zfit.pdf.ZPDF):
+class SiPMResponse_NoDarkNoAP_PDF(zfit.pdf.ZPDF):
     _N_OBS = 1
     _PARAMS = [
         "pedestal",
