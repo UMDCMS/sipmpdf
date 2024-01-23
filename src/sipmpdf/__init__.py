@@ -1,4 +1,3 @@
-from . import functions, generate, kernel, pdf
 from . import version
 
 __version__ = version.__version__
@@ -35,4 +34,4 @@ if gpus:
     except RuntimeError as e:
         print(e)
 
-from . import functions, kernel, pdf
+from . import functions, generate,  kernel, pdf
