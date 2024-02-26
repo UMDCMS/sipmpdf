@@ -16,7 +16,7 @@ dependencies = [
     "scipy",
     "numba",
     "mplhep",
-    "zfit==0.16.0",
+    "zfit==0.14",
 ]
 dynamic = ["version"]
 
