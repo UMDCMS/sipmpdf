@@ -9,7 +9,7 @@ authors = [
 ]
 description = "SiPM response functions as zfit PDFs"
 readme = "README.md"
-requires-python = ">=3.7, <3.11"
+requires-python = ">=3.8"
 license = {text = "MIT"}
 dependencies = [
     "numpy",
