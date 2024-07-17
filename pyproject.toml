@@ -16,7 +16,7 @@ dependencies = [
     "scipy",
     "numba",
     "mplhep",
-    "zfit==0.14.1",
+    "zfit==0.16",
 ]
 dynamic = ["version"]
 
@@ -29,4 +29,4 @@ path = "src/sipmpdf/__init__.py"
 version-file = "src/sipmpdf/version.py"
 
 [tool.setuptools_scm]
-write_to = "src/sipmpdf/_version.py"
+write_to = "src/sipmpdf/version.py"
